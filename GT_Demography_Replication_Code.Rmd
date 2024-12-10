@@ -1,0 +1,659 @@
+---
+title: "Online search interest in car brands: demographic determinants and state-specific effects"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Load Packages
+```{r}
+library(tidyverse)
+library(gtrendsR)
+library(readxl)
+library(writexl)
+library(spdep)
+library(ggplot2)
+library(car)
+library(lmtest)
+library(stargazer)
+library(texreg)
+library(rio)
+```
+
+<!-- ## Parameters -->
+<!-- ```{r} -->
+<!-- # enter keyword as it is reflected in the browser's address bar when you do it manually through trends.google.com -->
+<!-- keywords1=c( -->
+<!-- "%2Fg%2F120p4ddh", -->
+<!-- "%2Fg%2F12pvlm8d0", -->
+<!-- "%2Fg%2F12pvlm8br", -->
+<!-- "%2Fm%2F04tnkz", -->
+<!-- "%2Fm%2F04hpv1") -->
+
+<!-- keywords2=c( -->
+<!-- "%2Fm%2F0371q5", -->
+<!-- "%2Fm%2F0266vgv", -->
+<!-- "%2Fm%2F046fv7", -->
+<!-- "%2Fm%2F06ryb5", -->
+<!-- "%2Fm%2F01_pxf" -->
+<!-- ) -->
+
+<!-- # level of analysis -->
+<!-- level="state" -->
+
+<!-- # which survey to use -->
+<!-- survey="acs1" -->
+<!-- ``` -->
+
+<!-- ## Google Trends data -->
+
+<!-- Request Google Trends data for the topic of interest. -->
+<!-- ```{r} -->
+<!-- # empty lists -->
+<!-- gtrends_states1<-list() -->
+<!-- gtrends_states2<-list() -->
+
+<!-- # collect data for many years to the list -->
+<!-- for (i in c(2009:2019,2021)) { -->
+<!-- gtrends_states1[[paste0("gtrends_states1_",i)]]<- -->
+<!--        gtrends(keyword = keywords1, -->
+<!--                geo = "US", -->
+<!--                time = paste0(i,"-01-01 ",i,"-12-31"), -->
+<!--                low_search_volume = TRUE)$interest_by_region%>% -->
+<!--                mutate(YEAR=i) -->
+
+<!-- gtrends_states2[[paste0("gtrends_states2_",i)]]<- -->
+<!--        gtrends(keyword = keywords2, -->
+<!--                geo = "US", -->
+<!--                time = paste0(i,"-01-01 ",i,"-12-31"), -->
+<!--                low_search_volume = TRUE)$interest_by_region%>% -->
+<!--                mutate(YEAR=i) -->
+<!-- } -->
+
+<!-- # merge all  data frames comprising gtrends lists -->
+<!-- gtrends_states1_df<-bind_rows(gtrends_states1) -->
+<!-- gtrends_states2_df<-bind_rows(gtrends_states2) -->
+
+<!-- gtrends_states<-bind_rows(gtrends_states1_df, -->
+<!--                           gtrends_states2_df)%>% -->
+<!-- dplyr::select(-geo,-gprop) -->
+<!-- ``` -->
+
+<!-- Convert keywords to "normal" words -->
+<!-- ```{r} -->
+<!-- keywords_replacement<-data.frame( -->
+<!-- keyword=unique(gtrends_states$keyword), -->
+<!-- keyword_2=c( -->
+<!-- "Ford F-150", -->
+<!-- "RAM 1500", -->
+<!-- "Chevrolet Silverado 1500", -->
+<!-- "Toyota RAV4", -->
+<!-- "Honda CR-V", -->
+<!-- "Toyota Camry", -->
+<!-- "Nissan Rogue", -->
+<!-- "Jeep Grand Cherokee", -->
+<!-- "Toyota Highlander", -->
+<!-- "Honda Civic" -->
+<!-- )) -->
+
+<!-- gtrends_states<-gtrends_states%>% -->
+<!--   left_join(keywords_replacement)%>% -->
+<!--   dplyr::select(-keyword)%>% -->
+<!--   rename(keyword=keyword_2) -->
+
+<!-- ``` -->
+
+<!-- Create a database of state-level demographic characteristics using US census API. -->
+
+<!-- ```{r} -->
+<!-- # Load the tidycensus package into your R session -->
+<!-- library(tidycensus) -->
+<!-- # Define your Census API key and set it with census_api_key() -->
+<!-- api_key <- "adb17a79927311f38e26b60b23cac8393a7af0a2" -->
+<!-- census_api_key(api_key,install=TRUE,overwrite = TRUE) -->
+<!-- ``` -->
+
+<!-- Load the catalog of variables from 1-year ACS 2019. -->
+
+<!-- ```{r} -->
+<!-- readRenviron("~/.Renviron") -->
+<!-- variables <- load_variables(2019, survey, cache = TRUE) -->
+
+<!-- # create subfolder for outputs -->
+<!-- dir.create(file.path("Outputs"), recursive = TRUE) -->
+
+<!-- # save variables.csv for easy search of relevant ACS variables in Excel -->
+<!-- write_xlsx(variables, "Outputs/variables.xlsx")  -->
+<!-- ``` -->
+
+<!-- Get ACS data on relevant variables -->
+
+<!-- ```{r} -->
+<!-- names<-c( -->
+<!-- ### male counts -->
+<!-- male_all="B01001_002", -->
+<!-- male_0_4="B01001_003", -->
+<!-- male_5_9="B01001_004", -->
+<!-- male_10_14="B01001_005", -->
+<!-- male_15_17="B01001_006", -->
+<!-- male_18_19="B01001_007", -->
+<!-- male_20="B01001_008", -->
+<!-- male_21="B01001_009", -->
+<!-- male_22_24="B01001_010", -->
+<!-- male_25_29="B01001_011", -->
+<!-- male_30_34="B01001_012", -->
+<!-- male_35_39="B01001_013", -->
+<!-- male_40_44="B01001_014", -->
+<!-- male_45_49="B01001_015", -->
+<!-- male_50_54="B01001_016", -->
+<!-- male_55_59="B01001_017", -->
+<!-- male_60_61="B01001_018", -->
+<!-- male_62_64="B01001_019", -->
+<!-- male_65_66="B01001_020", -->
+<!-- male_67_69="B01001_021", -->
+<!-- male_70_74="B01001_022", -->
+<!-- male_75_79="B01001_023", -->
+<!-- male_80_84="B01001_024", -->
+<!-- male_85_over="B01001_025", -->
+
+<!-- ### female counts -->
+<!-- fem_all="B01001_026", -->
+<!-- fem_0_4="B01001_027", -->
+<!-- fem_5_9="B01001_028", -->
+<!-- fem_10_14="B01001_029", -->
+<!-- fem_15_17="B01001_030", -->
+<!-- fem_18_19="B01001_031", -->
+<!-- fem_20="B01001_032", -->
+<!-- fem_21="B01001_033", -->
+<!-- fem_22_24="B01001_034", -->
+<!-- fem_25_29="B01001_035", -->
+<!-- fem_30_34="B01001_036", -->
+<!-- fem_35_39="B01001_037", -->
+<!-- fem_40_44="B01001_038", -->
+<!-- fem_45_49="B01001_039", -->
+<!-- fem_50_54="B01001_040", -->
+<!-- fem_55_59="B01001_041", -->
+<!-- fem_60_61="B01001_042", -->
+<!-- fem_62_64="B01001_043", -->
+<!-- fem_65_66="B01001_044", -->
+<!-- fem_67_69="B01001_045", -->
+<!-- fem_70_74="B01001_046", -->
+<!-- fem_75_79="B01001_047", -->
+<!-- fem_80_84="B01001_048", -->
+<!-- fem_85_over="B01001_049", -->
+
+<!-- # total counts -->
+<!-- total="B02001_001", -->
+
+<!-- # race counts -->
+<!-- white="B02001_002", -->
+<!-- black="B02001_003", -->
+<!-- asian="B02001_005", -->
+
+<!-- # median income variables -->
+<!-- med_fam_inc="B19113_001", -->
+<!-- med_hh_inc="B19013_001") -->
+
+<!-- # empty list -->
+<!-- acs_states<-list() -->
+
+<!-- # get ACS data on the features specified above -->
+<!-- for (i in c(2009:2019,2021)) { -->
+<!-- acs_states[[paste0("acs_states_",i)]]<- get_acs(level, -->
+<!--                   variables=names, -->
+<!--                   survey=survey, -->
+<!--                   year=i, -->
+<!--                   output = "wide")%>% -->
+<!--                   dplyr::select(-ends_with("M"))%>% -->
+<!--                   mutate(YEAR=i) -->
+<!-- } -->
+
+<!-- # merge all data frames from acs_states list -->
+<!-- acs_states<-bind_rows(acs_states) -->
+<!-- ``` -->
+
+<!-- ## Join files to come up with the final data frame -->
+
+<!-- ```{r} -->
+<!-- data<-gtrends_states%>% -->
+<!--   left_join(acs_states,by=c("location"="NAME","YEAR")) -->
+<!-- ``` -->
+
+<!-- ## Convert counts to % -->
+
+<!-- ```{r} -->
+<!-- ## Convert counts to % of total population -->
+<!-- perc=dplyr::select(as.data.frame(data),male_allE:asianE)/ -->
+<!--   rep(as.data.frame(data)[,which(colnames(as.data.frame(data))=="totalE")], -->
+<!--       ncol(dplyr::select(as.data.frame(data),fem_allE:asianE)))*100 -->
+<!-- colnames(perc)<-paste0("perc_",colnames(perc)) -->
+
+<!-- library(dplyr) -->
+<!-- data_final<-bind_cols(data[,c("keyword", -->
+<!--                               "YEAR", -->
+<!--                               "location", -->
+<!--                               "hits", -->
+<!--                               "med_fam_incE", -->
+<!--                               "med_hh_incE")],perc)%>% -->
+<!--   dplyr::select(-perc_totalE) -->
+<!-- ``` -->
+
+<!-- ## Rename variables, clean variable names -->
+<!-- ```{r} -->
+<!-- # remove E from the end of column names -->
+<!-- colnames(data_final)<-str_replace(colnames(data_final), "E$", "") -->
+
+<!-- # rename some columns -->
+<!-- data_final<-data_final%>%dplyr::rename(interest=hits,state=location) -->
+
+<!-- # lower case -->
+<!-- colnames(data_final)<-tolower(colnames(data_final)) -->
+
+<!-- # remove NAs -->
+<!-- data_final<-na.omit(data_final) -->
+
+<!-- # convert income variables to thousand dollars -->
+<!-- data_final<-data_final%>%mutate(med_fam_inc=med_fam_inc/1000, -->
+<!--                                 med_hh_inc=med_hh_inc/1000) -->
+<!-- ``` -->
+
+<!-- ## Save workspace and data file -->
+
+<!-- ```{r} -->
+<!-- # save workspace -->
+<!-- save.image("Data_States.RData") -->
+
+<!-- # save data to Excel -->
+<!-- library(rio) -->
+<!-- export(data_final,"data_final.xlsx",overwrite=T) -->
+<!-- ``` -->
+
+## Import data from Excel
+```{r}
+data_final<-import("gt_census.xlsx")
+```
+
+## Summary statistics
+
+```{r}
+library(stargazer)
+# summary statistics for demographic variables
+stargazer(as.data.frame(dplyr::select_if(data_final,is.numeric)),type="html",out="summary.htm")
+
+# summary statistics for outcome variables
+export(data_final%>%
+  group_by(keyword)%>%
+  summarise(mean_interest=mean(interest),
+            sd_interest=sd(interest),
+            min_interest=min(interest),
+            p25_interest=quantile(interest,0.25),
+            median_interest=quantile(interest,0.5),
+            p75_interest=quantile(interest,0.75),
+            max_interest=max(interest)),"summary_outcome.xlsx",overwrite=TRUE)
+```
+
+## Demean data by state and year
+```{r}
+# subtract state averages
+data_final_demeaned<-data_final %>%
+  group_by(keyword,state) %>%
+  mutate(across(colnames(data_final)[-c(1:3)], 
+                ~ .x - mean(.x), 
+                .names = "{col}"))
+
+# subtract year averages
+data_final_demeaned<-data_final_demeaned %>%
+  group_by(keyword,year) %>%
+  mutate(across(colnames(data_final)[-c(1:3)], 
+                ~ .x - mean(.x), 
+                .names = "{col}"))
+```
+
+## Estimate rlasso models
+```{r}
+library(hdm)
+coef=list()
+i=0
+for (k in unique(data_final_demeaned$keyword)){
+  i=i+1
+  model.lasso<-rlasso(interest~.,
+                      data=subset(data_final_demeaned[,-c(2,3)],keyword==k)[,-1])
+coef[[i]]<-coef(model.lasso)
+}
+
+# convert list of coefficients to data frame
+names(coef)<-unique(data_final_demeaned$keyword)
+coef2<- Map(cbind,coef, keyword =(names(coef)))
+coefs<-bind_rows(coef2)
+coefs$var=names(coef(model.lasso))
+
+coefs<-as.data.frame(as.matrix(coefs))%>%
+  dplyr::select(-contains("keyword"))
+
+coefs<-pivot_longer(coefs,1:10,
+               names_to="keyword",
+               "values_to"="coef")
+
+coefs$keyword<-gsub("\\.","",coefs$keyword)
+coefs<-coefs%>%
+  mutate(coef=as.numeric(coef))%>%
+  filter((!coef==0)&(!var%in%c("(Intercept)","intercept")))
+```
+
+## Estimate 10 models selected by the rlasso procedure
+```{r}
+# list of keywords
+keywords<-unique(data_final$keyword)
+
+# convert year to factor
+data_final$year=factor(data_final$year)
+
+
+library(estimatr)
+model1<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[1]],year,state),
+keyword==keywords[1])[,-1])
+
+model2<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[2]],year,state),
+keyword==keywords[2])[,-1])
+
+model3<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[3]],year,state),
+keyword==keywords[3])[,-1])
+
+model4<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[4]],year,state),
+keyword==keywords[4])[,-1])
+
+model5<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[5]],year,state),
+keyword==keywords[5])[,-1])
+
+model6<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[6]],year,state),
+keyword==keywords[6])[,-1])
+
+model7<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[7]],year,state),
+keyword==keywords[7])[,-1])
+
+model8<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[8]],year,state),
+keyword==keywords[8])[,-1])
+
+model9<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[9]],year,state),
+keyword==keywords[9])[,-1])
+
+model10<-lm(interest~.,
+data=subset(dplyr::select(data_final,keyword,interest,
+coefs$var[coefs$keyword==keywords[10]],year,state),
+keyword==keywords[10])[,-1])
+
+
+library(relaimpo)
+imp1<-calc.relimp(model1,type="lmg",rela=TRUE)
+imp2<-calc.relimp(model2,type="lmg",rela=TRUE)
+imp3<-calc.relimp(model3,type="lmg",rela=TRUE)
+imp4<-calc.relimp(model4,type="lmg",rela=TRUE)
+imp5<-calc.relimp(model5,type="lmg",rela=TRUE)
+imp6<-calc.relimp(model6,type="lmg",rela=TRUE)
+imp7<-calc.relimp(model7,type="lmg",rela=TRUE)
+imp8<-calc.relimp(model8,type="lmg",rela=TRUE)
+imp9<-calc.relimp(model9,type="lmg",rela=TRUE)
+imp10<-calc.relimp(model10,type="lmg",rela=TRUE)
+
+imp_rlasso<-t(cbind(imp1@lmg[1:2],
+      imp2@lmg[1:2],
+      imp3@lmg[1:2],
+      imp4@lmg[1:2],
+      imp5@lmg[1:2],
+      imp6@lmg[1:2],
+      imp7@lmg[1:2],
+      imp8@lmg[1:2],
+      imp9@lmg[1:2],
+      imp10@lmg[1:2]))
+
+
+```
+
+## Save tables with rlasso models to file
+```{r include=FALSE}
+stargazer(model1,
+          model2,
+          model3,
+          model4,
+          model5,
+          se = starprep(model1,model2,model3,model4,model5),
+          style="AER",
+          column.labels = keywords_replacement$keyword_2[1:5],
+          out="regressions_lasso1.htm")
+
+stargazer(model6,
+          model7,
+          model8,
+          model9,
+          model10,
+          se = starprep(model6,model7,model8,model9,model10),
+          style="AER",
+          column.labels = keywords_replacement$keyword_2[6:10],
+          out="regressions_lasso2.htm")
+
+```
+
+## Regression table for 3 car models
+```{r}
+stargazer(model10,
+          model4,
+          model1,
+          se = starprep(
+          model10,
+          model4,
+          model1),
+          style="AER",
+          column.labels = keywords_replacement$keyword_2[c(10,4,1)],
+          out="regressions_stepwise_final.htm",
+          single.row = TRUE,
+          digits=2)
+```
+
+## Stepwise models based on BIC minimization
+```{r}
+model1<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[1])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[1]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model2<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[2])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[2]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model3<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[3])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[3]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model4<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[4])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[4]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model5<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[5])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[5]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model6<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[6])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[6]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model7<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[7])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[7]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model8<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[8])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[8]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model9<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[9])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[9]))),
+scope=list(lower=~year+state),
+trace = 0)
+
+model10<-step(lm(interest~.,
+data=subset(data_final,
+keyword==keywords[10])[,-1]),
+k=log(nrow(subset(data_final,
+keyword==keywords[10]))),
+scope=list(lower=~year+state),
+trace = 0)
+```
+
+## Relative importance in stepwise models
+```{r}
+library(relaimpo)
+imp1<-calc.relimp(model1,type="lmg",rela=TRUE)
+imp2<-calc.relimp(model2,type="lmg",rela=TRUE)
+imp3<-calc.relimp(model3,type="lmg",rela=TRUE)
+imp4<-calc.relimp(model4,type="lmg",rela=TRUE)
+imp5<-calc.relimp(model5,type="lmg",rela=TRUE)
+imp6<-calc.relimp(model6,type="lmg",rela=TRUE)
+imp7<-calc.relimp(model7,type="lmg",rela=TRUE)
+imp8<-calc.relimp(model8,type="lmg",rela=TRUE)
+imp9<-calc.relimp(model9,type="lmg",rela=TRUE)
+imp10<-calc.relimp(model10,type="lmg",rela=TRUE)
+
+imp_stepwise<-t(cbind(imp1@lmg[1:2],
+      imp2@lmg[1:2],
+      imp3@lmg[1:2],
+      imp4@lmg[1:2],
+      imp5@lmg[1:2],
+      imp6@lmg[1:2],
+      imp7@lmg[1:2],
+      imp8@lmg[1:2],
+      imp9@lmg[1:2],
+      imp10@lmg[1:2]))
+```
+
+## Save tables with stepwise regressions to file
+```{r include=FALSE}
+stargazer(model1,
+          model2,
+          model3,
+          model4,
+          model5,
+          se = starprep(model1,
+          model2,
+          model3,
+          model4,
+          model5),
+          style="AER",
+          column.labels = keywords_replacement$keyword_2[1:5],
+          out="regressions_stepwise1.htm",
+          digits=2)
+
+
+stargazer(model6,
+          model7,
+          model8,
+          model9,
+          model10,
+          se = starprep(
+          model6,
+          model7,
+          model8,
+          model9,
+          model10),
+          style="AER",
+          column.labels = keywords_replacement$keyword_2[6:10],
+          out="regressions_stepwise2.htm",
+          digits=2)
+```
+
+## Save importance table
+```{r}
+options(scipen=999)
+relaimpo<-data.frame(Model=rep(keywords_replacement$keyword_2,2),
+                     Method=c(rep("LASSO",10),rep("Stepwise",10)),
+                     bind_rows(data.frame(imp_rlasso)*100,
+                    data.frame(imp_stepwise)*100))%>%
+  mutate(demography=100-state-year)
+
+
+relaimpo_long<-relaimpo%>%
+  pivot_longer(year:demography,
+               names_to = "Factor",
+               values_to="Contribution")
+
+# order factor variable
+relaimpo_long$Model<-factor(relaimpo_long$Model,
+                            levels=relaimpo_long$Model[relaimpo_long$Factor=="demography"&relaimpo_long$Method=="LASSO"][order(relaimpo_long$Contribution[relaimpo_long$Factor=="demography"&relaimpo_long$Method=="LASSO"])])
+  
+```
+
+
+```{r}
+export(relaimpo,"relaimpo.xlsx",overwrite=TRUE)
+```
+
+## Visualize relative importance
+```{r}
+library(ggthemes)
+ggplot(relaimpo_long%>%
+         mutate_if(is.numeric,~round(.,digits=0)), 
+       aes(fill=Factor,x=Contribution, y=Model))+ 
+  geom_bar(position="fill",stat="identity")+
+    facet_wrap(~Method)+
+  labs(y="",x="\nProportion of explained variance")+
+  theme_economist()+
+  theme(panel.margin = unit(2, "lines"))
+```
+
+
+
